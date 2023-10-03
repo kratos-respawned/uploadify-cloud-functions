@@ -15,17 +15,19 @@ export async function upload(
   context: InvocationContext
 ): Promise<HttpResponseInit> {
   try {
+
     const body = await request.formData();
-    const api_key = body.get("key");
+    const api_key = body.get("key") ;    
     const token = request.headers.get("authorization");
-    if (api_key !== process.env.Password || !token) {
+    if ( !token || !api_key) {
       return { body: `Unauthorized`, status: 401 };
     }
     const file = body.get("file");
     const CONTAINERNAME = "images";
     if (file instanceof File) {
-      if (file.size > 1024 * 1024 * 500) {
-        return { body: `File too large`, status: 400 };
+
+      if (file.size > 1024 * 1024 * 10) {
+        return { body: `File too large Max 10mb is supported`, status: 400 };
       }
       const fileName = file["name"];
       const extention = fileName.split(".").pop();
@@ -49,7 +51,7 @@ export async function upload(
 
       const url = `https://${AccountName}.blob.core.windows.net/${CONTAINERNAME}/${hashedFileName}.${extention}?${ViewToken}`;
       const { response, error } = await VerifyToken(
-        api_key,
+        api_key as string,
         token,
         file.size,
         fileName,
@@ -68,7 +70,7 @@ export async function upload(
       );
       const data = await file.arrayBuffer();
       try {
-        const resp = await blockBlobClient.uploadData(data);
+        await blockBlobClient.uploadData(data);
         const body = {
           url,
           fileName: `${hashedFileName}.${extention}`,
