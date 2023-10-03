@@ -15,19 +15,25 @@ export async function upload(
   context: InvocationContext
 ): Promise<HttpResponseInit> {
   try {
-
     const body = await request.formData();
-    const api_key = body.get("key") ;    
+    const api_key = body.get("key");
     const token = request.headers.get("authorization");
-    if ( !token || !api_key) {
-      return { body: `Unauthorized`, status: 401 };
+    if (!token || !api_key) {
+      return {
+        jsonBody: {
+          message: "Invalid Token",
+        },
+        status: 401,
+      };
     }
     const file = body.get("file");
     const CONTAINERNAME = "images";
     if (file instanceof File) {
-
       if (file.size > 1024 * 1024 * 10) {
-        return { body: `File too large Max 10mb is supported`, status: 400 };
+        return {
+          jsonBody: { message: `File too large Max 10mb is supported` },
+          status: 400,
+        };
       }
       const fileName = file["name"];
       const extention = fileName.split(".").pop();
@@ -38,7 +44,7 @@ export async function upload(
       const AccountName = process.env.AccountName;
       const AccountKey = process.env.AccountKey;
       if (!AccountName || !AccountKey) {
-        return { body: `Error`, status: 500 };
+        return { jsonBody: { message: `Error` }, status: 500 };
       }
       const sasToken = await generateSASUrl({
         containerName: CONTAINERNAME,
@@ -58,7 +64,7 @@ export async function upload(
         url
       );
       if (error) {
-        return { body: error, status: 400 };
+        return { jsonBody: { message: error }, status: 400 };
       }
       const blobServiceClient = new BlobServiceClient(
         `https://${AccountName}.blob.core.windows.net?${sasToken}`
@@ -80,13 +86,12 @@ export async function upload(
           status: 200,
         };
       } catch (error) {
-        return { body: `Error`, status: 500 };
+        return { jsonBody: { message: `Error` }, status: 500 };
       }
     }
-    return { body: `Not a file`, status: 400 };
+    return { jsonBody: { message: `Not a file` }, status: 400 };
   } catch (error) {
-    context.log(error);
-    return { body: `Error`, status: 500 };
+    return { jsonBody: { message: `Error` }, status: 500 };
   }
 }
 
