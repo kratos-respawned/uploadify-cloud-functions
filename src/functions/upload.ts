@@ -9,6 +9,7 @@ import { BlobServiceClient } from "@azure/storage-blob";
 import { File } from "buffer";
 import generateSASUrl from "../lib/generateSAStoken";
 import { VerifyToken } from "../lib/verifyToken";
+import { updateStatus } from "../lib/updateStatus";
 
 export async function upload(
   request: HttpRequest,
@@ -26,6 +27,7 @@ export async function upload(
         status: 401,
       };
     }
+
     const file = body.get("file");
     const CONTAINERNAME = "images";
     if (file instanceof File) {
@@ -35,12 +37,26 @@ export async function upload(
           status: 400,
         };
       }
+
+      const { userID, response, error, currentStorage } = await VerifyToken(
+        api_key as string,
+        token,
+        file.size
+      );
+      if (error) {
+        return { jsonBody: { message: error }, status: 400 };
+      }
       const fileName = file["name"];
       const extention = fileName.split(".").pop();
-      const hashedFileName = createHmac("sha256", process.env.SecretKey || "")
-        .update(fileName)
-        .digest("hex");
-
+      const nameSalt = createHmac("sha256", process.env.SecretKey || "")
+        .update(Date.now().toString())
+        .digest("hex")
+        .slice(-5);
+      const hashedFileName =
+        createHmac("sha256", process.env.SecretKey || "")
+          .update(fileName)
+          .digest("hex")
+          .slice(0, 10) + nameSalt;
       const AccountName = process.env.AccountName;
       const AccountKey = process.env.AccountKey;
       if (!AccountName || !AccountKey) {
@@ -56,16 +72,7 @@ export async function upload(
       });
 
       const url = `https://${AccountName}.blob.core.windows.net/${CONTAINERNAME}/${hashedFileName}.${extention}?${ViewToken}`;
-      const { response, error } = await VerifyToken(
-        api_key as string,
-        token,
-        file.size,
-        fileName,
-        url
-      );
-      if (error) {
-        return { jsonBody: { message: error }, status: 400 };
-      }
+
       const blobServiceClient = new BlobServiceClient(
         `https://${AccountName}.blob.core.windows.net?${sasToken}`
       );
@@ -77,17 +84,30 @@ export async function upload(
       const data = await file.arrayBuffer();
       try {
         await blockBlobClient.uploadData(data);
-        const body = {
-          url,
-          fileName: `${hashedFileName}.${extention}`,
-        };
-        return {
-          jsonBody: body,
-          status: 200,
-        };
       } catch (error) {
         return { jsonBody: { message: `Error` }, status: 500 };
       }
+      const updateRes = await updateStatus({
+        userID,
+        fileName,
+        fileSize: file.size,
+        fileUrl: url,
+        currentStorage,
+      });
+      if (updateRes.error !== null) {
+        // TODO: Delete the file
+        // TODO: log the error in a database
+        return { jsonBody: { message: updateRes.error }, status: 400 };
+      }
+      const body = {
+        url,
+        fileName: `${hashedFileName}.${extention}`,
+        remainingStorage: response,
+      };
+      return {
+        jsonBody: body,
+        status: 200,
+      };
     }
     return { jsonBody: { message: `Not a file` }, status: 400 };
   } catch (error) {

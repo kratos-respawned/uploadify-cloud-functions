@@ -13,6 +13,15 @@ export async function download(
   request: HttpRequest,
   context: InvocationContext
 ): Promise<HttpResponseInit> {
+  const token = request.headers.get("authorization");
+  if (token !== process.env.ADMIN_SECRET) {
+    return {
+      jsonBody: {
+        message: "Invalid Token",
+      },
+      status: 401,
+    };
+  }
   const CONTAINERNAME = "images";
   const AccountName = process.env.AccountName;
   const AccountKey = process.env.AccountKey;
